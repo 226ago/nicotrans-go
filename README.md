@@ -36,10 +36,10 @@ Usage of nicotrans:
 ```
 
 ## 할 일
-- [ ] 작업 
 - [x] Naver Papago
 - [ ] Google Translator
 - [ ] Bing Microsoft Translator
 - [ ] Yandex.Translate
-- [ ] 인증서 생성 및 호스트 추가 자동화
-- [ ] GUI
+- [ ] 비동기화
+- [ ] 인증서 생성 및 호스트 파일 수정 자동화
+- [ ] GUI?
