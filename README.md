@@ -34,3 +34,13 @@ Usage of nicotrans:
   -port int
         웹 서버 포트 (default 443)
 ```
+
+## 할 일
+- [ ] 작업 비동기
+- [ ] 다양한 번역기 API 제공
+ - [x] Naver Papago
+ - [ ] Google Translator
+ - [ ] Bing Microsoft Translator
+ - [ ] Yandex.Translate
+- [ ] 인증서 생성 및 호스트 추가 자동화
+- [ ] GUI
