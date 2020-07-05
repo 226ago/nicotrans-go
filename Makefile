@@ -1,5 +1,5 @@
 run:
-	go run nicotrans.go
+	go run main.go
 
 cert:
 	openssl genrsa -out server.key 2048
@@ -10,7 +10,7 @@ cert:
 
 build:
 	mkdir -p dist
-	go build -ldflags "-s -w" nicotrans.go
+	go build -ldflags "-s -w" main.go
 
 all:
 	make build

@@ -25,14 +25,20 @@ nicotrans-go
 
 ```
 Usage of nicotrans:
-  -certfile string
-        인증서 파일 경로 (default "server.crt")
   -ip string
-        웹 서버 아이피 (default "0.0.0.0")
-  -keyfile string
-        인증서 개인 키 파일 경로 (default "server.key")
+        서버 주소 (default "0.0.0.0")
+  -langsrc string
+        번역할 언어 2자리 코드 (default "ja")
+  -langtarget string
+        번역될 언어 2자리 코드 (default "ko")
   -port int
-        웹 서버 포트 (default 443)
+        서버 포트 (default 443)
+  -sslcert string
+        서버 SSL 인증서 경로 (default "server.crt")   
+  -sslkey string
+        서버 SSL 인증서 키 경로 (default "server.key")
+  -translator string
+        사용될 번역기 종류 (default "papago")
 ```
 
 ## 할 일
@@ -40,6 +46,7 @@ Usage of nicotrans:
 - [ ] Google Translator
 - [ ] Bing Microsoft Translator
 - [ ] Yandex.Translate
-- [ ] 비동기화
+- [x] 비동기화
+- [ ] 더 나은 오류 핸들링
 - [ ] 인증서 생성 및 호스트 파일 수정 자동화
 - [ ] GUI?

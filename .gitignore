@@ -1,4 +1,6 @@
-nicotrans
-nicotrans.exe
+main
+main.exe
 server.crt
 server.key
+
+__debug*
