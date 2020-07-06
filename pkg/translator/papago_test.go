@@ -13,6 +13,12 @@ var chunks = []bytes.Buffer{
 }
 
 func TestPapago(t *testing.T) {
-	sequences := <-WithPapagoAsChunks(chunks, "en", "ko")
-	t.Logf("%+v", sequences)
+	c := chunks
+
+	e := <-WithPapagoAsChunks(&c, "en", "ko")
+	if e == nil {
+		t.Logf("%+v", c)
+	} else {
+		t.Error(e)
+	}
 }

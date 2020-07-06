@@ -22,17 +22,23 @@ type papagoResponsePayload struct {
 }
 
 // WithPapago 특정 문자열을 번역합니다
-func WithPapago(text string, source string, target string) <-chan string {
-	resolve := make(chan string)
+func WithPapago(text *string, source string, target string) <-chan error {
+	resolve := make(chan error)
 
 	go func() {
+		var e error
+
+		defer func() {
+			resolve <- e
+		}()
+
 		data, e := json.Marshal(papagoRequestPayload{
 			Source: source,
 			Target: target,
-			Text:   text,
+			Text:   *text,
 		})
 		if e != nil {
-			panic(e)
+			return
 		}
 
 		payload := url.Values{}
@@ -43,14 +49,14 @@ func WithPapago(text string, source string, target string) <-chan string {
 			"x-www-form-urlencoded",
 			strings.NewReader(payload.Encode()))
 		if e != nil {
-			panic(e)
+			return
 		}
 
 		defer res.Body.Close()
 
 		body, e := ioutil.ReadAll(res.Body)
 		if e != nil {
-			panic(e)
+			return
 		}
 
 		if res.StatusCode != 200 {
@@ -60,42 +66,53 @@ func WithPapago(text string, source string, target string) <-chan string {
 
 		var response papagoResponsePayload
 		if e := json.Unmarshal(body, &response); e != nil {
-			panic(e)
+			return
 		}
 
-		resolve <- response.TranslatedText
+		*text = response.TranslatedText
 	}()
 
 	return resolve
 }
 
 // WithPapagoAsChunks 청크를 번역합니다
-func WithPapagoAsChunks(chunks []bytes.Buffer, source string, target string) <-chan []TranslatedSequence {
-	resolve := make(chan []TranslatedSequence)
+func WithPapagoAsChunks(chunks *[]bytes.Buffer, source string, target string) <-chan error {
+	resolve := make(chan error)
 
 	go func() {
-		var sequences []TranslatedSequence
+		var e error
+
+		defer func() {
+			resolve <- e
+		}()
+
+		var sequences []translatedSequence
 
 		var wg = sync.WaitGroup{}
-		wg.Add(len(chunks))
+		wg.Add(len(*chunks))
 
-		for idx, chunk := range chunks {
-			go func(idx int, text string) {
+		for i, chunk := range *chunks {
+			go func(index int, text string, err *error) {
 				defer wg.Done()
-				translated := <-WithPapago(text, source, target)
-				sequences = append(sequences, TranslatedSequence{
-					index:      idx,
-					Original:   text,
-					Translated: translated,
-				})
-			}(idx, chunk.String())
+
+				if e := <-WithPapago(&text, source, target); e == nil {
+					sequences = append(sequences, translatedSequence{
+						index: index,
+						text:  text,
+					})
+				} else {
+					*err = e
+				}
+			}(i, chunk.String(), &e)
 		}
 
 		wg.Wait()
 
-		SortTranslatedSequence(&sequences)
+		sortTranslatedSequence(&sequences)
 
-		resolve <- sequences
+		for i, seq := range sequences {
+			(*chunks)[i] = *bytes.NewBufferString(seq.text)
+		}
 	}()
 
 	return resolve

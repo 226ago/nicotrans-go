@@ -1,10 +1,6 @@
-// +build !windows
+package system
 
-package utils
-
-import (
-	"os/user"
-)
+import "os/user"
 
 // HasRoot 관리자 권한이 있는지?
 func HasRoot() bool {

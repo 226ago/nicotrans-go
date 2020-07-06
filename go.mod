@@ -1,13 +1,8 @@
-module nicotrans
+module github.com/hype5/nicotrans-go
 
 go 1.14
 
 require (
+	github.com/miekg/dns v1.1.29
 	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
-	internal/translator v1.0.0
-	internal/utils v1.0.0
 )
-
-replace internal/translator => ./internal/translator
-
-replace internal/utils => ./internal/utils

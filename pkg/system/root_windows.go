@@ -1,6 +1,4 @@
-// +build windows
-
-package utils
+package system
 
 import "os"
 
