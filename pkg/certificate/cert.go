@@ -1,7 +1,6 @@
 package certificate
 
 import (
-	"crypto"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
@@ -16,7 +15,7 @@ import (
 	"time"
 )
 
-func exportPublicKey(priv crypto.PrivateKey) (crypto.PublicKey, error) {
+func exportPublicKey(priv interface{}) (interface{}, error) {
 	switch k := priv.(type) {
 	case *rsa.PrivateKey:
 		return &k.PublicKey, nil
@@ -27,7 +26,7 @@ func exportPublicKey(priv crypto.PrivateKey) (crypto.PublicKey, error) {
 	}
 }
 
-func exportPemBlock(priv crypto.PrivateKey) (*pem.Block, error) {
+func exportPemBlock(priv interface{}) (*pem.Block, error) {
 	switch k := priv.(type) {
 	case *rsa.PrivateKey:
 		return &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)}, nil
@@ -44,7 +43,7 @@ func exportPemBlock(priv crypto.PrivateKey) (*pem.Block, error) {
 }
 
 // Create 인증서와 키를 생성합니다
-func Create() ([]byte, interface{}, error) {
+func Create(names []string) ([]byte, interface{}, error) {
 	priv, e := rsa.GenerateKey(rand.Reader, 2048)
 	if e != nil {
 		return nil, nil, e
@@ -55,6 +54,7 @@ func Create() ([]byte, interface{}, error) {
 		Subject: pkix.Name{
 			Organization: []string{"NicoTrans"},
 		},
+		DNSNames:              names,
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().Add(time.Hour * 24 * 365 * 10),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
@@ -132,7 +132,7 @@ func ImportPemBlock(certPath string, privPath string) ([]byte, interface{}, erro
 		return nil, nil, e
 	}
 
-	var priv crypto.PrivateKey
+	var priv interface{}
 
 	switch privBlock.Type {
 	case "RSA PRIVATE KEY":
@@ -140,7 +140,7 @@ func ImportPemBlock(certPath string, privPath string) ([]byte, interface{}, erro
 	case "EC PRIVATE KEY":
 		priv, e = x509.ParseECPrivateKey(privBlock.Bytes)
 	default:
-		e = errors.New("Unsupported key")
+		e = fmt.Errorf("Unsupported key: %T", priv)
 	}
 
 	if e != nil {
@@ -157,5 +157,5 @@ func ImportPemBlock(certPath string, privPath string) ([]byte, interface{}, erro
 		return nil, nil, e
 	}
 
-	return cert, &priv, nil
+	return cert, priv, nil
 }

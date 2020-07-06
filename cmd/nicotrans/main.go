@@ -119,7 +119,7 @@ func main() {
 		log.Error("인증서를 불러올 수 없습니다:", e)
 		log.Info("새 인증서를 생성합니다")
 
-		cert, priv, e = certificate.Create()
+		cert, priv, e = certificate.Create([]string{"nmsg.nicovideo.jp"})
 		if e != nil {
 			log.Panic("인증서 생성에 실패했습니다:", e)
 		}
