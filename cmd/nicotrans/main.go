@@ -116,19 +116,19 @@ func main() {
 	if e == nil {
 		// 깔끔한 코드를 위한 빈 공간
 	} else if *serverCreate {
-		log.Error("인증서를 불러올 수 없습니다:", e)
+		log.Error("인증서를 불러올 수 없습니다\n", e)
 		log.Info("새 인증서를 생성합니다")
 
 		cert, priv, e = certificate.Create([]string{"nmsg.nicovideo.jp"})
 		if e != nil {
-			log.Panic("인증서 생성에 실패했습니다:", e)
+			log.Panic("인증서 생성에 실패했습니다\n", e)
 		}
 
 		if e := certificate.Export(cert, priv, *serverCertPath, *serverPrivPath); e != nil {
-			log.Error("인증서를 저장할 수 없습니다:", e)
+			log.Error("인증서를 저장할 수 없습니다\n", e)
 		}
 	} else {
-		log.Panic("인증서를 불러올 수 없습니다:", e)
+		log.Panic("인증서를 불러올 수 없습니다\n", e)
 	}
 
 	// 윈도우 환경에선 호스트 자동으로 수정해주기
@@ -153,20 +153,20 @@ func main() {
 
 				if e != nil {
 					// 관리자 권한을 불러올 수 없다면 오류 메세지 출력하기
-					log.Error("사용자 정보를 확인하는 중 오류가 발생했습니다:", e)
+					log.Error("사용자 정보를 확인하는 중 오류가 발생했습니다\n", e)
 				} else if root {
 					// 관리자 권한으로 실행했다면 호스트 수정하기
 					hosts.Add(target, "nmsg.nicovideo.jp")
 
 					if e = hosts.Flush(); e != nil {
-						log.Error("호스트 파일을 저장할 수 없습니다:", e)
+						log.Error("호스트 파일을 저장할 수 없습니다\n", e)
 					}
 				} else {
 					// 관리자 권한으로 다시 열기
 					log.Info("호스트 파일 수정을 위해 관리자 권한으로 다시 실행합니다")
 
 					if e = system.RunMeElevated(); e != nil {
-						log.Error("관리자 권한으로 다시 실행할 수 없습니다:", e)
+						log.Error("관리자 권한으로 다시 실행할 수 없습니다\n", e)
 					}
 				}
 			}
