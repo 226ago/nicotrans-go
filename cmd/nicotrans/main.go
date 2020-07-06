@@ -198,6 +198,6 @@ func main() {
 	log.Infof("니코트랜스를 실행합니다: %s", addr)
 
 	if e := server.ListenAndServeTLS("", ""); e != nil {
-		log.Panic("서버를 여는 중 오류가 발생했습니다", e)
+		log.Panic("서버를 여는 중 오류가 발생했습니다\n", e)
 	}
 }
