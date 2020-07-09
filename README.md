@@ -14,6 +14,8 @@ Usage of nicotrans:
         서버 SSL 인증서 경로 (default "server.crt")
   -cert-create
         서버 SSL 인증서가 존재하지 않을 때 생성할지? (default true)
+  -cert-install
+        서버 SSL 인증서를 설치할지? (default true)
   -cert-privatekey string
         서버 SSL 인증서 키 경로 (default "server.key")
   -edit-hosts
