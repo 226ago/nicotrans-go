@@ -36,7 +36,7 @@ func InstallAsRootCA(cert *x509.Certificate) error {
 		windows.CERT_STORE_ADD_NEW,                                     // DWORD dwAddDisposition
 		0,                                                              // PCCERT_CONTEXT *ppCertContext
 	)
-	if r == 0 {
+	if r == 0 && uintptr(e.(syscall.Errno)) != uintptr(windows.CRYPT_E_EXISTS) {
 		return e
 	}
 

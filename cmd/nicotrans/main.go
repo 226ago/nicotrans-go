@@ -11,7 +11,6 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	"gitea.chriswiegman.com/chriswiegman/goodhosts"
@@ -20,7 +19,6 @@ import (
 	"github.com/hype5/nicotrans-go/pkg/system"
 	"github.com/hype5/nicotrans-go/pkg/translator"
 	"github.com/op/go-logging"
-	"golang.org/x/sys/windows"
 )
 
 var serverIP = flag.String("ip", "127.0.0.1", "서버 주소")
@@ -80,10 +78,9 @@ func initHosts() error {
 				if e := system.RunMeElevated(); e != nil {
 					// 관리자 권한 취득 실패
 					return fmt.Errorf("호스트 파일 수정을 위한 관리자 권한 취득에 실패했습니다: %s", e)
-				} else {
-					// 관리자 권한 취득 성공
-					os.Exit(0)
 				}
+
+				os.Exit(0)
 			}
 		}
 	}
@@ -124,11 +121,7 @@ func initCertificate() (*x509.Certificate, interface{}, error) {
 			}
 			log.Info(strings.Join(msg, "\n"))
 		} else {
-			if uintptr(e.(syscall.Errno)) == uintptr(windows.CRYPT_E_EXISTS) {
-				log.Info("인증서가 이미 설치되어있습니다")
-			} else {
-				return nil, nil, fmt.Errorf("인증서를 설치할 수 없습니다: %s", e)
-			}
+			return nil, nil, fmt.Errorf("인증서를 설치할 수 없습니다: %s", e)
 		}
 	}
 
@@ -215,7 +208,7 @@ func main() {
 			"\t1) 메모장 같은 편집기를 관리자 권한으로 엽니다",
 			"\t2) %WINDIR%/System32/drivers/etc/hosts 파일을 엽니다",
 			"\t3) 가장 아래에 다음 줄을 추가하고 저장합니다",
-			"\t\t" + *serverIP + "nmsg.nicovideo.jp",
+			"\t\t" + *serverIP + " nmsg.nicovideo.jp",
 		}
 
 		log.Errorf(e.Error())
