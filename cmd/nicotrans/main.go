@@ -61,7 +61,11 @@ func initHosts() error {
 			return fmt.Errorf("호스트 파일을 열 수 없습니다: %s", e)
 		}
 
-		if !hosts.Has(*serverIP, "nmsg.nicovideo.jp") {
+		if hosts.Has(*serverIP, "nmsg.nicovideo.jp") {
+			log.Info("호스트 파일에 포워딩에 필요한 항목이 존재합니다")
+		} else {
+			log.Info("호스트 파일에 포워딩에 필요한 항목이 존재하지 않습니다")
+
 			r, e := system.HasRoot()
 			if e != nil {
 				log.Errorf("사용자 권한 정보를 불러오는데 실패했습니다: %s", e)
@@ -72,6 +76,8 @@ func initHosts() error {
 				if e := hosts.Flush(); e != nil {
 					return fmt.Errorf("호스트 파일을 저장할 수 없습니다: %s", e)
 				}
+
+				log.Info("호스트 파일에 포워딩에 필요한 항목을 추가했습니다")
 			} else {
 				log.Info("호스트 파일 수정을 위해 관리자 권한 취득을 시도합니다")
 
@@ -113,13 +119,17 @@ func initCertificate() (*x509.Certificate, interface{}, error) {
 	if *certInstall && runtime.GOOS == "windows" {
 		log.Info("인증서 설치를 시도합니다")
 
-		if e := certificate.InstallAsRootCA(cert); e == nil {
-			msg := []string{
-				"인증서를 성공적으로 설치했습니다",
-				"\t브라우저가 열려있을 때 인증서를 설치하면 캐시로 인해 인식되지 않을 수 있습니다",
-				"\t코멘트가 보이지 않는다면 열린 브라우저 창을 모두 닫고 다시 열어주세요",
+		if exists, e := certificate.InstallAsRootCA(cert); e == nil {
+			if exists {
+				log.Info("인증서가 이미 설치되어있습니다")
+			} else {
+				msg := []string{
+					"인증서를 성공적으로 설치했습니다",
+					"\t브라우저가 열려있을 때 인증서를 설치하면 캐시로 인해 인식되지 않을 수 있습니다",
+					"\t코멘트가 보이지 않는다면 열린 브라우저 창을 모두 닫고 다시 열어주세요",
+				}
+				log.Info(strings.Join(msg, "\n"))
 			}
-			log.Info(strings.Join(msg, "\n"))
 		} else {
 			return nil, nil, fmt.Errorf("인증서를 설치할 수 없습니다: %s", e)
 		}

@@ -14,7 +14,7 @@ var (
 )
 
 // InstallAsRootCA 인증서를 신뢰할 수 있는 루트 인증 기관으로 설치합니다
-func InstallAsRootCA(cert *x509.Certificate) error {
+func InstallAsRootCA(cert *x509.Certificate) (bool, error) {
 	store, e := syscall.CertOpenStore(
 		windows.CERT_STORE_PROV_SYSTEM, // LPCSTR lpszStoreProvider
 		0,                              // DWORD dwEncodingType
@@ -23,7 +23,7 @@ func InstallAsRootCA(cert *x509.Certificate) error {
 		uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr("root"))),                    // *pvPara
 	)
 	if e != nil {
-		return e
+		return false, e
 	}
 
 	defer syscall.CertCloseStore(store, 0)
@@ -36,9 +36,13 @@ func InstallAsRootCA(cert *x509.Certificate) error {
 		windows.CERT_STORE_ADD_NEW,                                     // DWORD dwAddDisposition
 		0,                                                              // PCCERT_CONTEXT *ppCertContext
 	)
-	if r == 0 && uintptr(e.(syscall.Errno)) != uintptr(windows.CRYPT_E_EXISTS) {
-		return e
+	if r == 0 {
+		if uintptr(e.(syscall.Errno)) == uintptr(windows.CRYPT_E_EXISTS) {
+			return true, nil
+		}
+
+		return false, e
 	}
 
-	return nil
+	return false, nil
 }
