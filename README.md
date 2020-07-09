@@ -8,7 +8,7 @@ nicotrans-go
 
 ## 설치
 
-[설치 동영상](https://youtu.be/UP-BTlps2rk)
+[설치 동영상](https://youtu.be/UP-BTlps2rk?t=60)
 
 ### 인증서 설치
 
