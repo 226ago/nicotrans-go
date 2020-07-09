@@ -18,7 +18,7 @@ Usage of nicotrans:
         서버 SSL 인증서를 설치할지? (default true)
   -cert-privatekey string
         서버 SSL 인증서 키 경로 (default "server.key")
-  -edit-hosts
+  -hosts-edit
         호스트 파일에 자동으로 아이피를 추가할지? (default true)
   -ip string
         서버 주소 (default "127.0.0.1")

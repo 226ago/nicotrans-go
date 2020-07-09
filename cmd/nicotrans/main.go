@@ -28,7 +28,7 @@ var certPrivPath = flag.String("cert-privatekey", "server.key", "서버 SSL 인�
 var certCreate = flag.Bool("cert-create", true, "서버 SSL 인증서가 존재하지 않을 때 생성할지?")
 var certInstall = flag.Bool("cert-install", true, "서버 SSL 인증서를 설치할지?")
 
-var editHosts = flag.Bool("edit-hosts", true, "호스트 파일에 자동으로 아이피를 추가할지?")
+var hostsEdit = flag.Bool("hosts-edit", true, "호스트 파일에 자동으로 아이피를 추가할지?")
 
 var langPlatform = flag.String("lang-platform", "papago", "사용될 번역기 종류")
 var langSource = flag.String("lang-source", "ja", "번역할 언어 2자리 코드")
@@ -53,7 +53,7 @@ var certificateTemplate = &x509.Certificate{
 }
 
 func initHosts() error {
-	if *editHosts && runtime.GOOS == "windows" {
+	if *hostsEdit && runtime.GOOS == "windows" {
 		log.Info("호스트 파일을 확인합니다")
 
 		hosts, e := goodhosts.NewHosts()
