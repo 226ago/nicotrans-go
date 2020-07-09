@@ -2,11 +2,17 @@ package main
 
 import (
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"flag"
 	"fmt"
+	"math/big"
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
+	"syscall"
+	"time"
 
 	"gitea.chriswiegman.com/chriswiegman/goodhosts"
 	"github.com/hype5/nicotrans-go/pkg/certificate"
@@ -14,14 +20,18 @@ import (
 	"github.com/hype5/nicotrans-go/pkg/system"
 	"github.com/hype5/nicotrans-go/pkg/translator"
 	"github.com/op/go-logging"
+	"golang.org/x/sys/windows"
 )
 
 var serverIP = flag.String("ip", "127.0.0.1", "서버 주소")
 var serverPort = flag.Int("port", 443, "서버 포트")
-var serverCertPath = flag.String("cert", "server.crt", "서버 SSL 인증서 경로")
-var serverPrivPath = flag.String("cert-privatekey", "server.key", "서버 SSL 인증서 키 경로")
-var serverCreate = flag.Bool("cert-create", true, "서버 SSL 인증서가 존재하지 않을 때 생성할지?")
+var certPath = flag.String("cert", "server.crt", "서버 SSL 인증서 경로")
+var certPrivPath = flag.String("cert-privatekey", "server.key", "서버 SSL 인증서 키 경로")
+var certCreate = flag.Bool("cert-create", true, "서버 SSL 인증서가 존재하지 않을 때 생성할지?")
+var certInstall = flag.Bool("cert-install", true, "서버 SSL 인증서를 설치할지?")
+
 var editHosts = flag.Bool("edit-hosts", true, "호스트 파일에 자동으로 아이피를 추가할지?")
+
 var langPlatform = flag.String("lang-platform", "papago", "사용될 번역기 종류")
 var langSource = flag.String("lang-source", "ja", "번역할 언어 2자리 코드")
 var langTarget = flag.String("lang-target", "ko", "번역될 언어 2자리 코드")
@@ -30,6 +40,100 @@ var log = logging.MustGetLogger("nicotrans")
 var logFormat = logging.MustStringFormatter(
 	`%{color}%{time:15:04:05.000} %{shortfunc} ▶ %{level:.4s}%{color:reset} %{message}`,
 )
+
+var certificateTemplate = &x509.Certificate{
+	SerialNumber: new(big.Int).SetInt64(int64(time.Now().Year())),
+	Subject: pkix.Name{
+		Organization: []string{"NicoTrans"},
+	},
+	DNSNames:    []string{"nmsg.nicovideo.jp"},
+	NotBefore:   time.Now(),
+	NotAfter:    time.Now().AddDate(10, 0, 0),
+	KeyUsage:    x509.KeyUsageDigitalSignature,
+	ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	IsCA:        true,
+}
+
+func initHosts() error {
+	if *editHosts && runtime.GOOS == "windows" {
+		log.Info("호스트 파일을 확인합니다")
+
+		hosts, e := goodhosts.NewHosts()
+		if e != nil {
+			return fmt.Errorf("호스트 파일을 열 수 없습니다: %s", e)
+		}
+
+		if !hosts.Has(*serverIP, "nmsg.nicovideo.jp") {
+			r, e := system.HasRoot()
+			if e != nil {
+				log.Errorf("사용자 권한 정보를 불러오는데 실패했습니다: %s", e)
+			} else if r {
+				// 관리자 권한으로 실행했다면 호스트 수정하기
+				hosts.Add(*serverIP, "nmsg.nicovideo.jp")
+
+				if e := hosts.Flush(); e != nil {
+					return fmt.Errorf("호스트 파일을 저장할 수 없습니다: %s", e)
+				}
+			} else {
+				log.Info("호스트 파일 수정을 위해 관리자 권한 취득을 시도합니다")
+
+				if e := system.RunMeElevated(); e != nil {
+					// 관리자 권한 취득 실패
+					return fmt.Errorf("호스트 파일 수정을 위한 관리자 권한 취득에 실패했습니다: %s", e)
+				} else {
+					// 관리자 권한 취득 성공
+					os.Exit(0)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func initCertificate() (*x509.Certificate, interface{}, error) {
+	cert, priv, e := certificate.Import(*certPath, *certPrivPath)
+	if e != nil {
+		log.Errorf("인증서를 불러올 수 없습니다: %s", e)
+
+		if *certCreate {
+			log.Info("새 인증서를 생성합니다")
+
+			// 새 인증서 만들기
+			if cert, priv, e = certificate.Create(certificateTemplate); e != nil {
+				return nil, nil, fmt.Errorf("인증서를 생성할 수 없습니다: %s", e)
+			}
+
+			// 새로 만든 인증서 파일로 저장하기
+			if e := certificate.Export(cert, priv, *certPath, *certPrivPath); e != nil {
+				return nil, nil, fmt.Errorf("인증서를 저장할 수 없습니다: %s", e)
+			}
+		} else {
+			return nil, nil, fmt.Errorf("인증서가 없으면 서버를 실행할 수 없습니다")
+		}
+	}
+
+	if *certInstall && runtime.GOOS == "windows" {
+		log.Info("인증서 설치를 시도합니다")
+
+		if e := certificate.InstallAsRootCA(cert); e == nil {
+			msg := []string{
+				"인증서를 성공적으로 설치했습니다",
+				"\t브라우저가 열려있을 때 인증서를 설치하면 캐시로 인해 인식되지 않을 수 있습니다",
+				"\t코멘트가 보이지 않는다면 열린 브라우저 창을 모두 닫고 다시 열어주세요",
+			}
+			log.Info(strings.Join(msg, "\n"))
+		} else {
+			if uintptr(e.(syscall.Errno)) == uintptr(windows.CRYPT_E_EXISTS) {
+				log.Info("인증서가 이미 설치되어있습니다")
+			} else {
+				return nil, nil, fmt.Errorf("인증서를 설치할 수 없습니다: %s", e)
+			}
+		}
+	}
+
+	return cert, priv, nil
+}
 
 func handle(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/api.json/" {
@@ -97,97 +201,41 @@ func handle(w http.ResponseWriter, r *http.Request) {
 func main() {
 	flag.Parse()
 
-	// 로거 만들기
+	// 기록 초기화
 	backend := logging.NewLogBackend(os.Stdout, "", 0)
 	backendFormatter := logging.NewBackendFormatter(backend, logFormat)
 	backendLeveled := logging.AddModuleLevel(backend)
 	backendLeveled.SetLevel(logging.ERROR, "nicotrans")
 	logging.SetBackend(backendLeveled, backendFormatter)
 
-	addr := fmt.Sprintf("%s:%d", *serverIP, *serverPort)
-
-	// 인증서 불러오기
-	var cert []byte
-	var priv interface{}
-	var e error
-
-	cert, priv, e = certificate.ImportPemBlock(*serverCertPath, *serverPrivPath)
-
-	if e == nil {
-		// 깔끔한 코드를 위한 빈 공간
-	} else if *serverCreate {
-		log.Error("인증서를 불러올 수 없습니다\n", e)
-		log.Info("새 인증서를 생성합니다")
-
-		cert, priv, e = certificate.Create([]string{"nmsg.nicovideo.jp"})
-		if e != nil {
-			log.Panic("인증서 생성에 실패했습니다\n", e)
+	// 호스트 파일 초기화
+	if e := initHosts(); e != nil {
+		msg := []string{
+			"호스트 파일을 수동으로 편집하고 싶다면 다음 과정을 따라해주세요",
+			"\t1) 메모장 같은 편집기를 관리자 권한으로 엽니다",
+			"\t2) %WINDIR%/System32/drivers/etc/hosts 파일을 엽니다",
+			"\t3) 가장 아래에 다음 줄을 추가하고 저장합니다",
+			"\t\t" + *serverIP + "nmsg.nicovideo.jp",
 		}
 
-		if e := certificate.Export(cert, priv, *serverCertPath, *serverPrivPath); e != nil {
-			log.Error("인증서를 저장할 수 없습니다\n", e)
-		}
-	} else {
-		log.Panic("인증서를 불러올 수 없습니다\n", e)
+		log.Errorf(e.Error())
+		log.Info(strings.Join(msg, "\n"))
 	}
 
-	// 윈도우 환경에선 호스트 자동으로 수정해주기
-	if runtime.GOOS == "windows" && *editHosts {
-		target := *serverIP
-		if target == "0.0.0.0" {
-			target = "127.0.0.1"
-		}
-
-		var root bool
-		var hosts goodhosts.Hosts
-		var e error
-
-		hosts, e = goodhosts.NewHosts()
-		if e != nil {
-			log.Error("호스트 파일을 열 수 없습니다", e)
-		} else {
-			if !hosts.Has(target, "nmsg.nicovideo.jp") {
-				log.Warning("호스트 파일에 포워딩에 필요한 엔트리가 존재하지 않습니다")
-
-				root, e = system.HasRoot()
-
-				if e != nil {
-					// 관리자 권한을 불러올 수 없다면 오류 메세지 출력하기
-					log.Error("사용자 정보를 확인하는 중 오류가 발생했습니다\n", e)
-				} else if root {
-					// 관리자 권한으로 실행했다면 호스트 수정하기
-					hosts.Add(target, "nmsg.nicovideo.jp")
-
-					if e = hosts.Flush(); e != nil {
-						log.Error("호스트 파일을 저장할 수 없습니다\n", e)
-					}
-				} else {
-					// 관리자 권한으로 다시 열기
-					log.Info("호스트 파일 수정을 위해 관리자 권한으로 다시 실행합니다")
-
-					if e = system.RunMeElevated(); e != nil {
-						log.Error("관리자 권한으로 다시 실행할 수 없습니다\n", e)
-					}
-				}
-			}
-		}
-
-		// 호스트 파일 수정에 실패했다면 수동 수정 안내 메세지 출력하기
-		if e != nil {
-			log.Info("호스트 파일을 수동으로 편집하기 위해선 다음 과정을 따라주세요")
-			log.Info("\t1) 메모장 같은 편집기를 관리자 권한으로 엽니다")
-			log.Info("\t2) %WINDIR%/System32/drivers/etc/hosts 파일을 엽니다")
-			log.Info("\t3) 가장 아래에 다음 줄을 추가합니다")
-			log.Infof("\t\t%s nmsg.nicovideo.jp", target)
-		}
+	// 인증서 초기화
+	cert, priv, e := initCertificate()
+	if e != nil {
+		log.Panic(e)
 	}
 
 	// 서버 만들기
+	addr := fmt.Sprintf("%s:%d", *serverIP, *serverPort)
 	server := http.Server{
+		Addr: addr,
 		TLSConfig: &tls.Config{
 			Certificates: []tls.Certificate{
 				{
-					Certificate: [][]byte{cert},
+					Certificate: [][]byte{cert.Raw},
 					PrivateKey:  priv,
 				},
 			},

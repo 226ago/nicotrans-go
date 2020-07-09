@@ -5,14 +5,11 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"math/big"
 	"os"
-	"time"
 )
 
 func exportPublicKey(priv interface{}) (interface{}, error) {
@@ -42,27 +39,32 @@ func exportPemBlock(priv interface{}) (*pem.Block, error) {
 	}
 }
 
-// Create 인증서와 키를 생성합니다
-func Create(names []string) ([]byte, interface{}, error) {
+// Create 메소드는 인증서와 키를 생성합니다
+func Create(template *x509.Certificate) (*x509.Certificate, interface{}, error) {
 	priv, e := rsa.GenerateKey(rand.Reader, 2048)
 	if e != nil {
 		return nil, nil, e
 	}
 
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			Organization: []string{"NicoTrans"},
-		},
-		DNSNames:              names,
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(time.Hour * 24 * 365 * 10),
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
+	// template := &x509.Certificate{
+	// 	SerialNumber: big.NewInt(1),
+	// 	Subject: pkix.Name{
+	// 		Organization: []string{"NicoTrans"},
+	// 	},
+	// 	DNSNames:    names,
+	// 	NotBefore:   time.Now(),
+	// 	NotAfter:    time.Now().AddDate(10, 0, 0),
+	// 	KeyUsage:    x509.KeyUsageDigitalSignature,
+	// 	ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	// 	IsCA:        true,
+	// }
+
+	certBytes, e := x509.CreateCertificate(rand.Reader, template, template, &priv.PublicKey, priv)
+	if e != nil {
+		return nil, nil, e
 	}
 
-	cert, e := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	cert, e := x509.ParseCertificate(certBytes)
 	if e != nil {
 		return nil, nil, e
 	}
@@ -71,7 +73,8 @@ func Create(names []string) ([]byte, interface{}, error) {
 }
 
 // Export 인증서와 키를 저장합니다
-func Export(cert []byte, priv interface{}, certPath string, privPath string) error {
+func Export(cert *x509.Certificate, priv interface{}, certPath string, privPath string) error {
+	// 저장될 파일 열기
 	certFile, e := os.OpenFile(certPath, os.O_CREATE|os.O_WRONLY, 0600)
 	if e != nil {
 		return e
@@ -86,12 +89,14 @@ func Export(cert []byte, priv interface{}, certPath string, privPath string) err
 
 	defer privFile.Close()
 
+	// PEM 블록 만들기
 	privBlock, e := exportPemBlock(priv)
 	if e != nil {
 		return e
 	}
 
-	if e := pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: cert}); e != nil {
+	// 저장하기
+	if e := pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}); e != nil {
 		return e
 	}
 
@@ -99,12 +104,12 @@ func Export(cert []byte, priv interface{}, certPath string, privPath string) err
 		return e
 	}
 
-	return e
+	return nil
 }
 
-// ImportPemBlock Pem 블록으로 된 인증서와 키를 불러옵니다
-func ImportPemBlock(certPath string, privPath string) ([]byte, interface{}, error) {
-	// 파일 뜯어오기
+// Import 인증서와 키를 파일에서 불러옵니다
+func Import(certPath string, privPath string) (*x509.Certificate, interface{}, error) {
+	// 파일 불러오기
 	certFile, e := ioutil.ReadFile(certPath)
 	if e != nil {
 		return nil, nil, e
@@ -115,19 +120,19 @@ func ImportPemBlock(certPath string, privPath string) ([]byte, interface{}, erro
 		return nil, nil, e
 	}
 
-	// PEM 블록 불러오기
+	// PEM 블록 디코딩하기
 	certBlock, _ := pem.Decode(certFile)
 	if certBlock == nil {
-		return nil, nil, errors.New("Failed to parse certificate")
+		return nil, nil, errors.New("인증서의 PEM 블록이 잘못됐습니다")
 	}
 
 	privBlock, _ := pem.Decode(privFile)
 	if privBlock == nil {
-		return nil, nil, errors.New("Failed to parse private key")
+		return nil, nil, errors.New("개인 키의 PEM 블록이 잘못됐습니다")
 	}
 
 	// 파싱하기
-	template, e := x509.ParseCertificate(certBlock.Bytes)
+	cert, e := x509.ParseCertificate(certBlock.Bytes)
 	if e != nil {
 		return nil, nil, e
 	}
@@ -143,16 +148,6 @@ func ImportPemBlock(certPath string, privPath string) ([]byte, interface{}, erro
 		e = fmt.Errorf("Unsupported key: %T", priv)
 	}
 
-	if e != nil {
-		return nil, nil, e
-	}
-
-	pub, e := exportPublicKey(priv)
-	if e != nil {
-		return nil, nil, e
-	}
-
-	cert, e := x509.CreateCertificate(rand.Reader, template, template, pub, priv)
 	if e != nil {
 		return nil, nil, e
 	}
