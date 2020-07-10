@@ -3,7 +3,6 @@ package nico
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"regexp"
@@ -59,6 +58,8 @@ type PayloadChat struct {
 	DateUsec       int    `json:"date_usec,omitempty"`
 	Nicoru         int    `json:"nicoru,omitempty"`
 	LastNicoruDate string `json:"last_nicoru_date,omitempty"`
+
+	ContentSource string `json:"content_source,omitempty"`
 }
 
 // Payload 메세지 구조
@@ -119,6 +120,8 @@ func Fetch(data io.Reader) <-chan Message {
 				continue
 			}
 
+			result.Payload[i].Chat.ContentSource = v.Chat.Content
+
 			result.Chats = append(result.Chats, MessageChat{
 				Index:   i,
 				Content: v.Chat.Content,
@@ -127,45 +130,6 @@ func Fetch(data io.Reader) <-chan Message {
 	}()
 
 	return resolve
-}
-
-// MessageToChunks 메세지를 합친 뒤 특정 길이만큼 잘라냅니다
-func MessageToChunks(message Message, size int) []bytes.Buffer {
-	var chunks = []bytes.Buffer{{}}
-
-	for _, chat := range message.Chats {
-		idx := len(chunks) - 1
-		item := fmt.Sprintf("§\n%s\n", chat.Content)
-		nextChunkLength := chunks[idx].Len() + len(item)
-
-		// 번역기가 받을 수 있는 최대 길이를 넘으면 다음 청크로 이동하기
-		if nextChunkLength > size {
-			idx++
-		}
-
-		// 청크가 존재하지 않는다면 빈 버퍼 추가하기
-		if len(chunks) <= idx {
-			chunks = append(chunks, bytes.Buffer{})
-		}
-
-		chunks[idx].WriteString(item)
-	}
-
-	return chunks
-}
-
-// ChunksToMessage 합쳐진 청크를 메세지로 변환한 뒤 적용합니다
-func ChunksToMessage(message *Message, chunks []bytes.Buffer) {
-	var b []byte
-
-	for _, chunk := range chunks {
-		b = append(b, chunk.Bytes()...)
-	}
-
-	for line, groups := range chunkPattern.FindAllSubmatch(b, -1) {
-		content := string(groups[1])
-		message.Chats[line].Content = content
-	}
 }
 
 // MessageToPayload 메세지 구조를 JSON 페이로드로 변환합니다

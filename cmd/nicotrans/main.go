@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -9,7 +10,9 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -51,6 +54,8 @@ var certificateTemplate = &x509.Certificate{
 	ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	IsCA:        true,
 }
+
+var queriesPattern = regexp.MustCompile(`(?m)^§(\d+)\n([^§]+)`)
 
 func initHosts() error {
 	if *hostsEdit && runtime.GOOS == "windows" {
@@ -139,32 +144,33 @@ func initCertificate() (*x509.Certificate, interface{}, error) {
 }
 
 func handle(w http.ResponseWriter, r *http.Request) {
+	var e error
+	var status = http.StatusOK
+	var prefix = fmt.Sprintf("%s - %s - %s", r.RemoteAddr, r.URL.Path, r.Referer())
+
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	defer func() {
+		if e != nil {
+			status = http.StatusInternalServerError
+			log.Error(prefix, e)
+		}
+
+		log.Infof("%s : %d", prefix, status)
+
+		w.WriteHeader(status)
+		r.Body.Close()
+	}()
+
 	if r.URL.Path != "/api.json/" {
-		w.WriteHeader(http.StatusNotFound)
+		status = http.StatusNotFound
 		return
 	}
 
 	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusBadRequest)
+		status = http.StatusBadRequest
 		return
 	}
-
-	var e error
-
-	defer func() {
-		if e == nil {
-			w.WriteHeader(http.StatusOK)
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-			log.Error(e)
-		}
-
-		r.Body.Close()
-	}()
-
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-
-	log.Infof("%s - %s", r.RemoteAddr, r.Referer())
 
 	// 받은 데이터를 기존 API 서버로 포워딩한 뒤 데이터 불러오기
 	message := <-nico.Fetch(r.Body)
@@ -173,24 +179,31 @@ func handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chunks := nico.MessageToChunks(message, 5000)
-
-	log.Infof("%s - %s - 코멘트 %d개", r.RemoteAddr, r.Referer(), len(message.Chats))
-
-	// 번역하기
-	switch *langPlatform {
-	case "papago":
-		e = <-translator.WithPapagoAsChunks(&chunks, *langSource, *langTarget)
-	default:
-		log.Warningf("%s 값은 번역 플랫폼이 아닙니다", *langPlatform)
+	queries := make([]string, len(message.Chats))
+	for index, chat := range message.Chats {
+		queries[index] = fmt.Sprintf("§%d\n%s\n", index, chat.Content)
 	}
 
-	// 번역 중 오류가 발생했다면 멈추기
-	if e != nil {
+	log.Infof("%s : 코멘트 %d개", prefix, len(message.Chats))
+
+	// 번역하기
+	translated := <-translator.Translate(queries, *langPlatform, *langSource, *langTarget)
+	if translated.Error != nil {
+		e = translated.Error
 		return
 	}
 
-	nico.ChunksToMessage(&message, chunks)
+	var translatedBytes bytes.Buffer
+	for _, seq := range translated.Sequences {
+		translatedBytes.WriteString(seq.Translated)
+	}
+
+	for _, groups := range queriesPattern.FindAllStringSubmatch(translatedBytes.String(), -1) {
+		index, _ := strconv.Atoi(groups[1])
+		// fmt.Printf("<<< {%d} %s\n", index, message.Chats[index].Content)
+		// fmt.Printf(">>> {%d} %s\n", index, groups[2])
+		message.Chats[index].Content = groups[2]
+	}
 
 	// 변환한 메세지를 다시 페이로드로 바꾸기
 	payload, e := nico.MessageToPayload(message)

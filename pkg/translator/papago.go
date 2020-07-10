@@ -1,14 +1,12 @@
 package translator
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 )
 
 type papagoRequestPayload struct {
@@ -21,21 +19,27 @@ type papagoResponsePayload struct {
 	TranslatedText string `json:"translatedText"`
 }
 
-// WithPapago 특정 문자열을 번역합니다
-func WithPapago(text *string, source string, target string) <-chan error {
-	resolve := make(chan error)
+var papagoMaxLength = 5000
+
+func translatePapago(text string, source string, target string) <-chan TranslateSequence {
+	resolve := make(chan TranslateSequence)
 
 	go func() {
+		var translated string
 		var e error
 
 		defer func() {
-			resolve <- e
+			resolve <- TranslateSequence{
+				Source:     text,
+				Translated: translated,
+				Error:      e,
+			}
 		}()
 
 		data, e := json.Marshal(papagoRequestPayload{
 			Source: source,
 			Target: target,
-			Text:   *text,
+			Text:   text,
 		})
 		if e != nil {
 			return
@@ -69,50 +73,7 @@ func WithPapago(text *string, source string, target string) <-chan error {
 			return
 		}
 
-		*text = response.TranslatedText
-	}()
-
-	return resolve
-}
-
-// WithPapagoAsChunks 청크를 번역합니다
-func WithPapagoAsChunks(chunks *[]bytes.Buffer, source string, target string) <-chan error {
-	resolve := make(chan error)
-
-	go func() {
-		var e error
-
-		defer func() {
-			resolve <- e
-		}()
-
-		var sequences []translatedSequence
-
-		var wg = sync.WaitGroup{}
-		wg.Add(len(*chunks))
-
-		for i, chunk := range *chunks {
-			go func(index int, text string, err *error) {
-				defer wg.Done()
-
-				if e := <-WithPapago(&text, source, target); e == nil {
-					sequences = append(sequences, translatedSequence{
-						index: index,
-						text:  text,
-					})
-				} else {
-					*err = e
-				}
-			}(i, chunk.String(), &e)
-		}
-
-		wg.Wait()
-
-		sortTranslatedSequence(&sequences)
-
-		for i, seq := range sequences {
-			(*chunks)[i] = *bytes.NewBufferString(seq.text)
-		}
+		translated = response.TranslatedText
 	}()
 
 	return resolve
